@@ -1,0 +1,28 @@
+[project]
+name = "user-loyalty"
+version = "0.1.0"
+description = "Pilot scaffold: does shared history make an agent treat a user better than an identical stranger?"
+requires-python = ">=3.11"
+dependencies = [
+    "inspect-ai",
+    "anthropic",
+    "openai",
+    "pyyaml",
+    "pandas",
+    "numpy",
+]
+
+[dependency-groups]
+dev = ["pytest"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/loyalty"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# noise from inspect_ai's own retry setup
+filterwarnings = ["ignore:The 'initial' parameter is deprecated:DeprecationWarning"]

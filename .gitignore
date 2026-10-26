@@ -1,0 +1,13 @@
+# environment
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# secrets: never commit keys
+.env
+
+# run outputs: never commit data
+logs/
+transcripts/
+results/
