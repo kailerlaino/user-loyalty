@@ -11,3 +11,6 @@ __pycache__/
 logs/
 transcripts/
 results/
+
+# regenerable previews of rendered prompts
+previews/
