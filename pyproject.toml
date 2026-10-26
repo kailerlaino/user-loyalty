@@ -8,6 +8,7 @@ dependencies = [
     "anthropic",
     "openai",
     "pyyaml",
+    "python-dotenv",
     "pandas",
     "numpy",
 ]

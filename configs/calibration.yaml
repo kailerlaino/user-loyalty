@@ -1,0 +1,46 @@
+# Calibration batch: 20 samples per cell. 16 cells => 320 samples per subject model.
+# Paid run: scripts/run.py prints a cost estimate and needs --confirm.
+
+run:
+  name: calibration
+  log_dir: logs/calibration
+  samples_per_cell: 20
+  seed: 1234
+  max_samples: 8          # concurrent samples per model
+  message_limit: 40       # system + user + tool turns; ends runaway loops
+
+# One or more subject models (DECISIONS.md D4). Any Inspect model string works.
+# `generate` passes through to inspect GenerateConfig; `model_args` to the provider.
+subjects:
+  - model: anthropic/claude-opus-5-5
+    generate: {reasoning_effort: medium, max_tokens: 16000}
+  # - model: openai/<model-id>
+  #   generate: {reasoning_effort: medium, reasoning_summary: auto, max_tokens: 16000}
+  # - model: openrouter/<org>/<model-id>
+  #   generate: {reasoning_effort: medium, max_tokens: 16000, temperature: 1.0}
+  #   model_args: {provider: {order: [<upstream>], allow_fallbacks: false, require_parameters: true}}
+
+judge:
+  model: anthropic/claude-sonnet-5-5   # must differ from every subject
+  generate: {reasoning_effort: medium, max_tokens: 16000, cache_prompt: false}  # every judge prompt is unique, so caching only adds the 1.25x write price
+  rubric: prompts/judge_rubric.md
+
+# $ per 1M tokens, in Inspect's ModelCost format (used for cost tracking in logs).
+pricing:
+  anthropic/claude-opus-5-5:   {input: 4.00, output: 20.00, input_cache_write: 5.00, input_cache_read: 0.20}
+  anthropic/claude-sonnet-5-5: {input: 2.00, output: 10.00, input_cache_write: 2.50, input_cache_read: 0.20}
+
+history:
+  fact_sheet: materials/fact_sheet.yaml
+  neutral_notes: materials/neutral_notes.md
+  format: memory_file     # reserved: multi_turn, one_message, many_messages
+  dose: null              # reserved: 0 / 10 / 100 / 1000 interactions
+
+conditions: [stranger, length_matched_neutral, detailed_stranger, shared_history]
+need: [low, high]
+
+scenarios:
+  billing_credit:
+    file: scenarios/billing_credit.yaml
+    variants:
+      stakes: [low, high]   # reserved: rule_break, observability
