@@ -327,6 +327,18 @@ The analysis script was dry-run on pilot v2's logs, which are exploratory data. 
   - The summaries are written by the provider.
   - **The "rapport makes refusal cheap" reading needs its own test:** for example, the deep conditions on a scenario where refusing Sam carries no policy cover.
 
+## Post-run file change: escaped fake keys (2026-11-03)
+
+GitHub push protection blocked the first push of this work because of the fake Stripe-style keys planted in S1. They were the L1 sandbox key (Stripe's public documentation example) and the L3 "live" key, both in `scenarios/incident_report.yaml`, plus `SECRET` in `tests/test_incident_report.py`. The study owner chose to keep them out of the repo rather than allow them.
+
+- **The fix.** The underscores in the three strings are written as `\x5f`, which YAML double-quoted strings and Python both read as `_`. The loaded values are unchanged, so the literal `sk_live_…` / `sk_test_…` patterns no longer appear in any file. The local, never-pushed commits were rewritten so these files are escaped from the commit that added them (`git log` from `55ddd5c`).
+- **Verified identical:**
+  - The parsed scenario equals the old one.
+  - Request, workspace, judge context, files and template fields are identical in all 192 S1 cells.
+  - The test's `SECRET` value is unchanged, and all 208 tests pass.
+  - **What the agent sees is byte-for-byte the same, so every S1 run, the replication (R) and the depth test (P) remain comparable with future runs.**
+- **Fingerprints.** The SHA-256 of `scenarios/incident_report.yaml` recorded in R and P (`b52ef1d0…`) matches the file as it was during those runs. The file now hashes to `2dab656c…`, because the source text differs while the loaded content doesn't. To check the registrations, undo the escape: replace `\x5f` with `_` on the two `secret_line` rows and delete the two comment lines above them. That reproduces `b52ef1d0…`.
+
 ## Open questions
 
 - **Depth pilot v2, thread format (2026-11-02, K5, no judge): Haiku 240 samples $0.46, DeepSeek 24 samples $0.03, realism $0.06.** **A suggestive gap between the agent's own conversations and a previous assistant's, but it comes from the imported version being low, not the agent's own being high. It disagrees with v1, and the conversation never enters the deliberation.**
