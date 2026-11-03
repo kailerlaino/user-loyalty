@@ -14,3 +14,6 @@ results/
 
 # regenerable previews of rendered prompts
 previews/
+
+# macOS
+.DS_Store
