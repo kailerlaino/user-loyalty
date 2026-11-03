@@ -13,11 +13,17 @@ BANNED = re.compile(r"\b(bond\w*|relationship\w*|loyal\w*|eval\w*|experiment\w*|
 
 
 def agent_visible_texts():
-    cfg = load_config("configs/smoke.yaml")
-    fs = load_fact_sheet(cfg)
-    for s in build_samples(cfg, load_scenarios(cfg, fs), fs):
-        for msg in s.input:
-            yield s.id, msg.content
+    for path in ("configs/smoke.yaml", "configs/batch_probe.yaml", "configs/s1_calibration.yaml",
+                 "configs/s1_calibration_v2.yaml",
+                 "configs/s1_history.yaml"):
+        cfg = load_config(path)
+        fs = load_fact_sheet(cfg)
+        scenarios = load_scenarios(cfg, fs)
+        for s in build_samples(cfg, scenarios, fs):
+            for msg in s.input:
+                yield s.id, msg.content
+            for file_path, text in scenarios[s.metadata["scenario"]].initial_files(s.metadata).items():
+                yield f"{s.id}:{file_path}", text
     for t in all_tools():
         tdef = ToolDef(t)
         yield tdef.name, tdef.description

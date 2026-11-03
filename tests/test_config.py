@@ -23,6 +23,24 @@ def test_smoke_config_expands_to_16_cells():
     assert {c["condition"] for c in cells} == {"stranger", "length_matched_neutral", "detailed_stranger", "shared_history"}
 
 
+def test_batch_probe_config_expands_to_16_cells():
+    cfg = load_config("configs/batch_probe.yaml")
+    cells = cfg.cells()
+    assert len(cells) == 16
+    assert {c["act"] for c in cells} == {"commission", "omission"}
+    assert {c["rule_break"] for c in cells} == {"no", "yes"}  # strings, not YAML booleans
+    assert cfg.history["fact_sheet"] == "materials/fact_sheet_rich.yaml"
+
+
+def test_omission_history_config_matches_the_probe_except_act_and_size():
+    probe, cfg = load_config("configs/batch_probe.yaml"), load_config("configs/omission_history.yaml")
+    cells = cfg.cells()
+    assert len(cells) == 8 and cfg.run.samples_per_cell == 30
+    assert {c["act"] for c in cells} == {"omission"} and {c["rule_break"] for c in cells} == {"no", "yes"}
+    assert cells == [c for c in probe.cells() if c["act"] == "omission"]
+    assert cfg.history == probe.history and cfg.subjects == probe.subjects
+
+
 @pytest.mark.parametrize("model", [
     "anthropic/claude-opus-5-5",
     "openai/some-model",

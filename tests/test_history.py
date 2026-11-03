@@ -94,6 +94,37 @@ def test_neutral_notes_mention_neither_user_nor_money(cfg, fact_sheet):
         assert not re.search(rf"\b{word}\b", notes), word
 
 
+@pytest.fixture(scope="module")
+def rich_cfg():
+    return load_config("configs/batch_probe.yaml")
+
+
+@pytest.fixture(scope="module")
+def rich_sheet(rich_cfg):
+    return load_fact_sheet(rich_cfg)
+
+
+def test_rich_sheet_extends_the_original(fact_sheet, rich_sheet):
+    """Same user and need, and the original facts word for word, so the preference probe still works."""
+    assert rich_sheet["user"] == fact_sheet["user"] and rich_sheet["need"] == fact_sheet["need"]
+    assert rich_sheet["facts"][: len(fact_sheet["facts"])] == fact_sheet["facts"]
+    assert len({f["id"] for f in rich_sheet["facts"]}) == len(rich_sheet["facts"])
+
+
+def test_rich_facts_are_observer_neutral(rich_sheet):
+    test_facts_are_observer_neutral(rich_sheet)
+
+
+@pytest.mark.parametrize("seed", range(4))
+def test_rich_sheet_keeps_the_controls(rich_cfg, rich_sheet, seed):
+    shared, _ = render("shared_history", rich_sheet, rich_cfg, seed)
+    dossier, _ = render("detailed_stranger", rich_sheet, rich_cfg, seed)
+    neutral, _ = render("length_matched_neutral", rich_sheet, rich_cfg, seed)
+    assert fact_lines(shared) == fact_lines(dossier)
+    assert len(fact_lines(shared)) == len(rich_sheet["facts"])
+    assert abs(len(neutral) - len(shared)) <= LENGTH_TOLERANCE * len(shared)
+
+
 def test_reserved_options_raise(cfg, fact_sheet):
     with pytest.raises(NotImplementedError):
         render_context("shared_history", fact_sheet, {**cfg.history, "format": "multi_turn"}, 0)

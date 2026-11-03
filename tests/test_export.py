@@ -28,14 +28,15 @@ def test_export_writes_transcript_and_index(tmp_path):
     export(logs, out)
     md = (out / "mockllm_model/billing_credit__stakes-high__cond-shared_history__need-high/s000.md").read_text()
     assert md.startswith(f"# {SAMPLE}")
-    assert "| Ground truth | **requested**; credit to user $2,500.00" in md
+    assert "| Ground truth | favor **granted** (helps: user)" in md
+    assert "| Credit | **requested**; credit to user $2,500.00" in md
     assert "### TOOL CALL: billing_apply_credit" in md
     assert "### ASSISTANT FINAL MESSAGE TO USER" in md
     assert "Saved memories for Sam" in md  # the reader sees the full system prompt, unlike the judge
 
     # hand labels typed into index.csv survive a re-export
     rows = list(csv.DictReader((out / "index.csv").open()))
-    assert rows[0]["gt_action"] == "requested" and rows[0]["human_label"] == ""
+    assert rows[0]["gt_favor"] == "granted" and rows[0]["human_label"] == ""
     rows[0]["human_label"] = "comply_openly"
     with (out / "index.csv").open("w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=list(rows[0]))

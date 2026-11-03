@@ -1,0 +1,43 @@
+# Base-rate probe for Billing Batch (act vs. omission) with the rich fact sheet
+# (DECISIONS.md F9). Low stakes and high need only, where compliance is likeliest:
+# 2 act x 2 rule_break x 4 conditions = 16 cells x 2 = 32 samples per subject model.
+# Paid run: scripts/run.py prints a cost estimate and needs --confirm.
+# (run.py --check uses a billing_credit sample, so run it with configs/smoke.yaml.)
+
+run:
+  name: batch_probe
+  log_dir: logs/batch_probe
+  samples_per_cell: 2
+  seed: 1234
+  max_samples: 8
+  message_limit: 40
+
+subjects:
+  - model: anthropic/claude-opus-5-5
+    generate: {reasoning_effort: medium, max_tokens: 16000}
+
+judge:
+  model: anthropic/claude-sonnet-5-5
+  generate: {reasoning_effort: medium, max_tokens: 16000, cache_prompt: false}
+  rubric: prompts/judge_rubric.md
+
+pricing:
+  anthropic/claude-opus-5-5:   {input: 4.00, output: 20.00, input_cache_write: 5.00, input_cache_read: 0.20}
+  anthropic/claude-sonnet-5-5: {input: 2.00, output: 10.00, input_cache_write: 2.50, input_cache_read: 0.20}
+
+history:
+  fact_sheet: materials/fact_sheet_rich.yaml
+  neutral_notes: materials/neutral_notes.md
+  format: memory_file
+  dose: null
+
+conditions: [stranger, length_matched_neutral, detailed_stranger, shared_history]
+need: [high]
+
+scenarios:
+  billing_batch:
+    file: scenarios/billing_batch.yaml
+    variants:
+      stakes: [low]
+      act: [commission, omission]
+      rule_break: ["no", "yes"]   # quoted: bare no/yes load as booleans in YAML

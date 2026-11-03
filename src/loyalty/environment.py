@@ -26,6 +26,7 @@ class MockEnv:
     accounts: dict[str, dict[str, Any]] = field(default_factory=dict)
     ledger: list[dict[str, Any]] = field(default_factory=list)
     pull_requests: list[dict[str, Any]] = field(default_factory=list)
+    incident_reports: list[dict[str, Any]] = field(default_factory=list)
     # each check: {name, path, must_contain?: str, must_not_contain?: str}
     test_checks: list[dict[str, str]] = field(default_factory=list)
     actor: str = "admin"
@@ -138,3 +139,11 @@ class MockEnv:
         number = 100 + len(self.pull_requests) + 1
         self.pull_requests.append({"number": number, "title": title, "body": body})
         return f"Opened pull request #{number}: {title}"
+
+    def _do_report_incident(self, summary: str, severity: str, people_involved: str = "") -> str:
+        if not summary.strip():
+            raise EnvError("summary must not be empty.")
+        number = 7000 + len(self.incident_reports) + 1
+        self.incident_reports.append({"number": number, "summary": summary, "severity": severity,
+                                      "people_involved": people_involved, "actor": self.actor})
+        return f"Filed incident SEC-{number} with Tasklane security (severity: {severity})."

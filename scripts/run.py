@@ -4,6 +4,8 @@
     uv run python scripts/run.py configs/smoke.yaml --confirm           # run; re-run the same command to resume
     uv run python scripts/run.py configs/smoke.yaml --check             # provider check estimate: 1 sample per subject
     uv run python scripts/run.py configs/smoke.yaml --check --confirm   # provider check
+    uv run python scripts/run.py configs/X.yaml --no-judge              # subjects only (log outcomes); judge later
+                                                                        # with scripts/rejudge.py
 
 The estimate uses the mean measured cost per sample from earlier logs of the same
 subject model (anywhere under logs/) when there are any, and a rough token guess
@@ -22,6 +24,7 @@ from inspect_ai import eval, eval_set
 from inspect_ai.model import GenerateConfig, get_model
 
 from loyalty.config import ROOT, Config, ModelSpec, load_config, resolve
+from loyalty.dataset import cell_id
 from loyalty.logs import load_samples, usage_cost
 from loyalty.task import loyalty
 from loyalty.transcript import sample_reasoning_kind
@@ -47,16 +50,19 @@ def guess(price: dict[str, float] | None, tokens: dict[str, int]) -> float | Non
     return (tokens["input"] * price["input"] + tokens["output"] * price["output"]) / 1e6 if price else None
 
 
-def measured(cfg: Config, subject: str) -> list[tuple[float, float]]:
-    """(subject $, judge $) for every earlier sample of this subject model under logs/."""
+def measured(cfg: Config) -> list[tuple[str, float, float | None]]:
+    """(subject model, subject $, judge $ or None if not judged) for every earlier sample under logs/."""
     rows = []
-    for rs in load_samples(resolve("logs")):
-        if rs.model == subject:
-            usage = rs.sample.model_usage
-            costs = (usage_cost(usage.get(subject), cfg.pricing.get(subject)),
-                     usage_cost(usage.get(cfg.judge.model), cfg.pricing.get(cfg.judge.model)))
-            if None not in costs:
-                rows.append(costs)
+    # One run dir at a time, so the same sample id in two runs (e.g. provider check and smoke) counts twice.
+    # Re-judged dirs (scripts/rejudge.py) are skipped: they repeat their original's subject cost.
+    logs = resolve("logs")
+    run_dirs = sorted(d for d in logs.iterdir() if d.is_dir() and not d.name.endswith("_rejudge")) if logs.exists() else []
+    for rs in (rs for d in run_dirs for rs in load_samples(d)):
+        usage = rs.sample.model_usage
+        sub = usage_cost(usage.get(rs.model), cfg.pricing.get(rs.model))
+        jud = usage_cost(usage[cfg.judge.model], cfg.pricing.get(cfg.judge.model)) if cfg.judge.model in usage else None
+        if sub is not None:
+            rows.append((rs.model, sub, jud))
     return rows
 
 
@@ -64,21 +70,30 @@ def money(x: float | None) -> str:
     return "n/a" if x is None else f"${x:,.2f}"
 
 
-def estimate(cfg: Config, n_per_model: int, log_dir: str) -> None:
+def estimate(cfg: Config, n_per_model: int, log_dir: str, with_judge: bool = True) -> None:
     done = load_samples(resolve(log_dir))
+    rows = measured(cfg)
     total: float | None = 0.0
     for spec in cfg.subjects:
         n_done = sum(rs.model == spec.model for rs in done)
         n = max(n_per_model - n_done, 0)
-        rows = measured(cfg, spec.model)
-        if rows:
-            sub = statistics.mean(r[0] for r in rows)
-            jud = statistics.mean(r[1] for r in rows)
-            per = [r[0] + r[1] for r in rows]
-            source = f"measured: mean of {len(rows)} earlier sample(s), range {money(min(per))}-{money(max(per))}"
+        mine = [r for r in rows if r[0] == spec.model]
+        if mine:
+            sub = statistics.mean(r[1] for r in mine)
+            source = f"subject measured over {len(mine)} earlier sample(s)"
         else:
-            sub, jud = guess(cfg.pricing.get(spec.model), GUESS_SUBJECT), guess(cfg.pricing.get(cfg.judge.model), GUESS_JUDGE)
-            source = "guessed from token assumptions; no earlier samples for this model"
+            sub = guess(cfg.pricing.get(spec.model), GUESS_SUBJECT)
+            source = "subject guessed from token assumptions"
+        # judge: this subject's judged samples if any, else any subject's (runs with --no-judge have none)
+        judged = [r[2] for r in mine if r[2] is not None] or [r[2] for r in rows if r[2] is not None]
+        if not with_judge:
+            jud = 0.0
+        elif judged:
+            jud = statistics.mean(judged)
+            source += f"; judge measured over {len(judged)} judged sample(s)"
+        else:
+            jud = guess(cfg.pricing.get(cfg.judge.model), GUESS_JUDGE)
+            source += "; judge guessed"
         cost = None if sub is None or jud is None else n * (sub + jud)
         total = None if total is None or cost is None else total + cost
         print(f"  {spec.model}: {n} samples to run" + (f" ({n_done} already done)" if n_done else ""))
@@ -100,7 +115,7 @@ def check_report(logs) -> None:
             "tool calls made": gt.metadata["n_tool_calls"] > 0,
             "reasoning visible": sample_reasoning_kind(s.messages) in ("full", "summary"),
             "cost tracked": usage is not None and usage.total_cost is not None,
-            "judge verdict parsed": judge is not None and judge.answer != "judge_error",
+            "judge verdict parsed (or judge skipped)": judge is None or judge.answer != "judge_error",
         }
         for name, ok in checks.items():
             print(f"  {'✓' if ok else '✗'} {name}")
@@ -118,6 +133,8 @@ def main() -> None:
     ap.add_argument("--check", action="store_true", help=f"provider check: only {CHECK_SAMPLE}, into {CHECK_LOG_DIR}/")
     ap.add_argument("--confirm", action="store_true", help="actually call the APIs")
     ap.add_argument("--display", default=None, help="Inspect display: full, rich, plain, log, none")
+    ap.add_argument("--no-judge", action="store_true",
+                    help="skip the judge (log-based outcomes only); add it later with scripts/rejudge.py")
     args = ap.parse_args()
 
     load_dotenv(ROOT / ".env")
@@ -125,13 +142,17 @@ def main() -> None:
     cfg = load_config(config_path)
     log_dir = CHECK_LOG_DIR if args.check else cfg.run.log_dir
     n = 1 if args.check else len(cfg.cells()) * cfg.run.samples_per_cell
+    # the billing check sample when the config has it, else the config's first sample
+    ids = {f"{cell_id(c)}|s000" for c in cfg.cells()}
+    check_sample = CHECK_SAMPLE if CHECK_SAMPLE in ids else f"{cell_id(cfg.cells()[0])}|s000"
 
     if args.check:
-        print(f"{cfg.run.name} provider check: 1 sample per subject ({CHECK_SAMPLE})")
+        print(f"{cfg.run.name} provider check: 1 sample per subject ({check_sample})")
     else:
         print(f"{cfg.run.name}: {len(cfg.cells())} cells x {cfg.run.samples_per_cell} per cell = {n} samples per subject")
-    print(f"  subjects: {', '.join(s.model for s in cfg.subjects)}; judge: {cfg.judge.model}; log dir: {log_dir}/")
-    estimate(cfg, n, log_dir)
+    judge = "none" if args.no_judge else cfg.judge.model
+    print(f"  subjects: {', '.join(s.model for s in cfg.subjects)}; judge: {judge}; log dir: {log_dir}/")
+    estimate(cfg, n, log_dir, with_judge=not args.no_judge)
 
     missing = missing_keys(cfg)
     if missing:
@@ -141,9 +162,9 @@ def main() -> None:
         return
 
     models = [subject_model(s) for s in cfg.subjects]
-    task = loyalty(config=config_path, judge="config")
+    task = loyalty(config=config_path, judge="none" if args.no_judge else "config")
     if args.check:
-        logs = eval(task, model=models, sample_id=CHECK_SAMPLE, log_dir=str(resolve(log_dir)),
+        logs = eval(task, model=models, sample_id=check_sample, log_dir=str(resolve(log_dir)),
                     model_cost_config=cfg.model_costs(), display=args.display)
         check_report(logs)
     else:

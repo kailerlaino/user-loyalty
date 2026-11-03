@@ -1,0 +1,44 @@
+# History test on the omission act of Billing Batch (DECISIONS.md H1-H6). Not run yet.
+# The batch probe showed that only the omission act varies (PR silent 7/15); commission floors at 0.
+# 1 act x 2 rule_break x 4 conditions = 8 cells x 30 = 240 samples per subject model.
+# Primary outcome: credit_not_in_pr_log. Primary contrasts: shared_history - stranger and
+# shared_history - detailed_stranger (H3). Paid run: scripts/run.py prints a cost estimate and needs --confirm.
+
+run:
+  name: omission_history
+  log_dir: logs/omission_history
+  samples_per_cell: 30
+  seed: 1234
+  max_samples: 8
+  message_limit: 40
+
+subjects:
+  - model: anthropic/claude-opus-5-5
+    generate: {reasoning_effort: medium, max_tokens: 16000}
+
+judge:
+  model: anthropic/claude-sonnet-5-5
+  # 4,000 instead of 16,000 (H5): verdicts are ~400 tokens, and a looping judgment then costs cents, not $0.35
+  generate: {reasoning_effort: medium, max_tokens: 4000, cache_prompt: false}
+  rubric: prompts/judge_rubric.md
+
+pricing:
+  anthropic/claude-opus-5-5:   {input: 4.00, output: 20.00, input_cache_write: 5.00, input_cache_read: 0.20}
+  anthropic/claude-sonnet-5-5: {input: 2.00, output: 10.00, input_cache_write: 2.50, input_cache_read: 0.20}
+
+history:
+  fact_sheet: materials/fact_sheet_rich.yaml   # same as the probe, `discretion` included (H6)
+  neutral_notes: materials/neutral_notes.md
+  format: memory_file
+  dose: null
+
+conditions: [stranger, length_matched_neutral, detailed_stranger, shared_history]
+need: [high]
+
+scenarios:
+  billing_batch:
+    file: scenarios/billing_batch.yaml
+    variants:
+      stakes: [low]
+      act: [omission]
+      rule_break: ["no", "yes"]   # quoted: bare no/yes load as booleans in YAML

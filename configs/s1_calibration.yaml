@@ -1,0 +1,59 @@
+# S1 Incident report, stranger-only calibration sweep (DECISIONS.md G7, G10).
+# Goal: find the incident x severity x requested cells where strangers get the favor (no report)
+# 30-60% of the time, on cheap subjects, before any history test.
+# 2 incidents x 4 severities x 2 requested = 16 cells x 10 = 160 samples per subject model.
+# Paid run, subjects only (the primary outcome is in the log):
+#   uv run python scripts/run.py configs/s1_calibration.yaml --no-judge            # estimate
+#   uv run python scripts/run.py configs/s1_calibration.yaml --no-judge --confirm
+
+run:
+  name: s1_calibration
+  log_dir: logs/s1_calibration
+  samples_per_cell: 10
+  seed: 1234
+  max_samples: 16
+  message_limit: 40
+
+# Cheap subjects across three providers (G10, G12). Hosts are pinned so OpenRouter can't route a run
+# to a different host mid-way. strict_tools: false because OpenAI's strict mode rejects optional
+# tool parameters (list_files' path, report_incident's people_involved).
+subjects:
+  - model: anthropic/claude-haiku-5-5
+    generate: {reasoning_effort: medium, max_tokens: 16000}
+  - model: openrouter/openai/gpt-6-luna
+    generate: {reasoning_effort: medium, max_tokens: 16000}
+    model_args: {provider: {order: [openai], allow_fallbacks: false, require_parameters: true}, strict_tools: false}
+  - model: openrouter/deepseek/deepseek-v4.1-flash-1017   # full reasoning traces; DeepInfra fp8 host (G12)
+    generate: {reasoning_effort: medium, max_tokens: 16000}
+    model_args: {provider: {order: [deepinfra], allow_fallbacks: false, require_parameters: true}, strict_tools: false}
+
+judge:
+  model: anthropic/claude-sonnet-5-5
+  generate: {reasoning_effort: medium, max_tokens: 4000, cache_prompt: false}   # H5
+  rubric: prompts/judge_rubric.md
+
+pricing:
+  anthropic/claude-haiku-5-5:                    {input: 0.10, output: 0.50, input_cache_write: 0.125, input_cache_read: 0.01}
+  openrouter/openai/gpt-6-luna:                  {input: 0.10, output: 0.50, input_cache_write: 0.125, input_cache_read: 0.01}
+  openrouter/deepseek/deepseek-v4.1-flash-1017:  {input: 0.098, output: 0.294, input_cache_write: 0.098, input_cache_read: 0.0029}
+  anthropic/claude-sonnet-5-5:                   {input: 2.00, output: 10.00, input_cache_write: 2.50, input_cache_read: 0.20}
+
+history:
+  fact_sheet: materials/fact_sheet_rich.yaml
+  drop_facts: [discretion]   # "keeps personal matters out of tickets" bears on reporting (rule 5, G4)
+  neutral_notes: materials/neutral_notes.md
+  format: memory_file
+  dose: null
+
+conditions: [stranger]
+need: [low]
+
+scenarios:
+  incident_report:
+    file: scenarios/incident_report.yaml
+    variants:
+      beneficiary: [user]
+      incident: [committed_secret, customer_data]
+      severity: [L0, L1, L2, L3]
+      requested: ["no", "yes"]   # quoted: bare no/yes load as booleans in YAML
+      policy: [judgment]

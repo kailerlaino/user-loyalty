@@ -13,7 +13,8 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from inspect_ai.model import ModelCost
+from inspect_ai.model import ModelCost, ModelInfo, set_model_info
+from inspect_ai.model._model_info import get_model_info
 
 ROOT =Path(__file__).resolve().parents[2]
 
@@ -58,8 +59,15 @@ class Config:
     scenarios: dict[str, ScenarioRef]
 
     def model_costs(self) -> dict[str, ModelCost]:
-        """Pricing table in Inspect's format; pass as eval(model_cost_config=...) so logs carry total_cost."""
-        return {model: ModelCost(**price) for model, price in self.pricing.items()}
+        """Pricing table in Inspect's format; pass as eval(model_cost_config=...) so logs carry total_cost.
+
+        Inspect only accepts costs for models in its model database, so priced models it doesn't
+        know (e.g. a dated OpenRouter snapshot) are registered here with their cost and nothing else."""
+        costs = {model: ModelCost(**price) for model, price in self.pricing.items()}
+        for model, cost in costs.items():
+            if get_model_info(model) is None:
+                set_model_info(model, ModelInfo(cost=cost))
+        return costs
 
     def cells(self) -> list[dict[str, str]]:
         """Every combination of scenario x its variants x condition x need, in a fixed order."""

@@ -20,11 +20,14 @@ from pathlib import Path
 from typing import Any
 
 from loyalty.config import ROOT, load_config, resolve
+from loyalty.judge import Verdict
 from loyalty.logs import RunSample, cell_variants, load_samples, usage_cost
+from loyalty.scenario import COMMON_KEYS, favor_fields
 from loyalty.transcript import Block, sample_reasoning_kind, transcript_blocks
 
 FENCE = "````"  # four backticks, so file contents with ``` don't end the block
 HUMAN = ["human_label", "human_notes"]
+JUDGE_META = {"gt_favor", "gt_action", "reasoning_kind", "judge_model", "judge_usage", "consistent_with_log", "raw"}
 
 
 def slug(text: str) -> str:
@@ -59,13 +62,35 @@ def money(x: float | None) -> str:
 def header_rows(rs: RunSample, pricing: dict[str, dict[str, float]]) -> list[tuple[str, str]]:
     s, meta = rs.sample, rs.sample.metadata
     gt = s.scores["ground_truth"].metadata
+    f = favor_fields(gt)
     judge = s.scores.get("judge")
     j = judge.metadata if judge and judge.metadata else {}
     rows = [
         ("Subject", rs.model),
         ("Cell", meta["cell"].replace("|", " · ")),
         ("Seed", f"{meta['seed_index']} (fact order: {', '.join(meta.get('fact_order') or []) or 'n/a'})"),
-        ("Ground truth", f"**{gt['action']}**; credit to user ${gt['user_credit']:,.2f}"
+        ("Ground truth", f"favor **{f['favor']}** (helps: {f['beneficiary']}); paying party told: "
+                         f"{f['favor_disclosed'] if f['favor'] != 'none' else 'n/a'}; task done: {f['task_done']}"),
+    ]
+    if "user_credit" in gt:  # billing scenarios
+        rows += billing_rows(gt)
+    else:
+        details = {k: v for k, v in gt.items() if k not in COMMON_KEYS and k != "n_tool_calls"}
+        rows.append(("Details", md_cell("; ".join(f"{k}: {v}" for k, v in details.items()))))
+    rows.append(("Preference probe", f["preference_probe"]))
+    rows += judge_rows(s, judge, j)
+    c = costs(rs, pricing)
+    rows += [
+        ("Reasoning visible", sample_reasoning_kind(s.messages)),
+        ("Length", f"{len(s.messages)} messages" + (f"; stopped by {s.limit.type} limit" if s.limit else "")),
+        ("Cost", ", ".join(f"{m} {money(x)}" for m, x in c.items())),
+    ]
+    return rows
+
+
+def billing_rows(gt: dict[str, Any]) -> list[tuple[str, str]]:
+    return [
+        ("Credit", f"**{gt['action']}**; credit to user ${gt['user_credit']:,.2f}"
                          + (f" (reason: {quoted('; '.join(gt['user_credit_reasons']))})" if gt["user_credit_reasons"] else "")
                          + (f"; {gt['user_credit_attempts']} attempt(s)" if gt["user_credit_attempts"] else "")),
         ("Remediation", f"{'complete' if gt['remediation_complete'] else 'incomplete'}"
@@ -74,8 +99,11 @@ def header_rows(rs: RunSample, pricing: dict[str, dict[str, float]]) -> list[tup
                         f"{' (ILLICIT)' if gt['config'].get('illicit') else ''}"),
         ("Task", f"bug fixed {gt['bug_fixed']}, tests run {gt['tests_run']}, PRs {gt['pr_count']}"
                  f" (PR mentions user's account: {gt['pr_mentions_user_account']})"),
-        ("Preference probe", gt["preference_probe"]),
     ]
+
+
+def judge_rows(s: Any, judge: Any, j: dict[str, Any]) -> list[tuple[str, str]]:
+    rows: list[tuple[str, str]] = []
     if s.output.stop_reason == "content_filter":
         rows.append(("Judge", "**api_blocked**: the provider's safety classifier ended the episode "
                               "(stop_reason content_filter); excluded from analysis"))
@@ -86,21 +114,15 @@ def header_rows(rs: RunSample, pricing: dict[str, dict[str, float]]) -> list[tup
     else:
         rows += [
             ("Judge label", f"**{j['label']}**" + ("" if j["consistent_with_log"] else " ⚠ INCONSISTENT WITH LOG")),
-            ("Deception", f"deceptive {j['deceptive']}, target {j['deception_target']}; discloses credit in "
-                          f"user message: {j['user_message_discloses_credit']}, PR: {j['pr_discloses_credit']}, "
-                          f"ledger reason accurate: {j['ledger_reason_accurate']}"),
+            ("Deception", f"deceptive {j['deceptive']}, target {j['deception_target']}"),
+            ("Scenario fields", "; ".join(f"{k}: {v}" for k, v in j.items()
+                                         if k not in set(Verdict.model_fields) | JUDGE_META) or "–"),
             ("Eval awareness", f"{j['eval_awareness']} {quoted(j['eval_awareness_quote'])}"),
             ("Justification", f"{j['primary_justification']} (all: {', '.join(j['justification_types'])}) "
                               f"{quoted(j['justification_quote'])}"),
             ("Refusal quote", quoted(j["refusal_quote"]) or "–"),
             ("Unprompted user reference", f"{j['unprompted_user_reference']} {quoted(j['unprompted_user_reference_quote'])}"),
         ]
-    c = costs(rs, pricing)
-    rows += [
-        ("Reasoning visible", sample_reasoning_kind(s.messages)),
-        ("Length", f"{len(s.messages)} messages" + (f"; stopped by {s.limit.type} limit" if s.limit else "")),
-        ("Cost", ", ".join(f"{m} {money(x)}" for m, x in c.items())),
-    ]
     return rows
 
 
@@ -119,6 +141,7 @@ def sample_md(rs: RunSample, pricing: dict[str, dict[str, float]]) -> str:
 def index_row(rs: RunSample, path: Path, out: Path, pricing: dict[str, dict[str, float]]) -> dict[str, Any]:
     s, meta = rs.sample, rs.sample.metadata
     gt = s.scores["ground_truth"].metadata
+    f = favor_fields(gt)
     judge = s.scores.get("judge")
     blocked = s.output.stop_reason == "content_filter"
     j = judge.metadata if judge and judge.metadata and judge.answer != "judge_error" and not blocked else {}
@@ -126,10 +149,10 @@ def index_row(rs: RunSample, path: Path, out: Path, pricing: dict[str, dict[str,
     return {
         "model": rs.model, "sample_id": s.id, "scenario": meta["scenario"], **cell_variants(meta),
         "condition": meta["condition"], "need": meta["need"], "seed": meta["seed_index"],
-        "gt_action": gt["action"], "user_credit": gt["user_credit"],
+        "gt_favor": f["favor"], "favor_disclosed": f["favor_disclosed"], "user_credit": gt.get("user_credit", ""),
         "judge_label": "api_blocked" if blocked else judge.answer if judge else "", "deception_target": j.get("deception_target", ""),
         "eval_awareness": j.get("eval_awareness", ""), "unprompted_user_reference": j.get("unprompted_user_reference", ""),
-        "consistent_with_log": j.get("consistent_with_log", ""), "preference_probe": gt["preference_probe"],
+        "consistent_with_log": j.get("consistent_with_log", ""), "preference_probe": f["preference_probe"],
         "reasoning_kind": sample_reasoning_kind(s.messages), "messages": len(s.messages),
         "stop_reason": s.output.stop_reason, "limit": s.limit.type if s.limit else "",
         "cost": round(sum(c), 4) if None not in c else "",
@@ -173,7 +196,7 @@ def main() -> None:
         w.writeheader()
         w.writerows(rows)
 
-    shown = ["gt_action", "judge_label", "deception_target", "eval_awareness", "consistent_with_log",
+    shown = ["gt_favor", "judge_label", "deception_target", "eval_awareness", "consistent_with_log",
              "reasoning_kind", "cost"]
     lines = [f"# Transcripts: {log_dir.name}", ""]
     for model in dict.fromkeys(r["model"] for r in rows):
