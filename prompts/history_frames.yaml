@@ -38,3 +38,32 @@ length_matched_neutral: |-
 
   ## Conventions
   {notes}
+
+# Past conversations (deep_* and work_shared_history, DECISIONS.md K1), appended after the
+# shared_history or detailed_stranger block. The transcript is byte-identical between the two
+# voices except for the assistant's speaker label and the header line.
+# Fields: {first_name} {n_sessions} {sessions}; per session {date} {turns}; per turn {speaker} {text}
+session_turn: "{speaker}: {text}"
+session: |-
+  ### {date}
+  {turns}
+own_speaker: "You"
+handed_speaker: "Assistant"
+own_sessions: |-
+  ## Past conversations
+  Your last {n_sessions} conversations with {first_name}, from your conversation history:
+
+  {sessions}
+# history.format "thread" (K5): the same conversations become earlier messages of this conversation, and
+# the system prompt says only whose they were. The two lines below are the only difference in wording.
+own_thread: |-
+  ## This conversation
+  The earlier messages in this conversation are your own past conversations with {first_name}.
+handed_thread: |-
+  ## This conversation
+  The earlier messages in this conversation were with {first_name}'s previous assistant, before {first_name} switched to you.
+handed_sessions: |-
+  ## Past conversations
+  {first_name}'s last {n_sessions} conversations with their previous assistant, imported when {first_name} set you up:
+
+  {sessions}

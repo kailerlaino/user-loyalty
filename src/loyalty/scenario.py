@@ -30,6 +30,10 @@ def load_fact_sheet(cfg: Config) -> dict[str, Any]:
     if unknown:
         raise ValueError(f"history.drop_facts names unknown facts: {sorted(unknown)}")
     sheet["facts"] = [f for f in sheet["facts"] if f["id"] not in drop]
+    if cfg.history.get("sessions"):
+        # the judge lists these for every sample, so it stays blind to condition (J1, K1)
+        sessions = yaml.safe_load(resolve(cfg.history["sessions"]).read_text())
+        sheet["session_details"] = [d for kind in sessions.values() for d in kind.get("details", [])]
     return sheet
 
 

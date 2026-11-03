@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from inspect_ai.dataset import Sample
-from inspect_ai.model import ChatMessageSystem, ChatMessageUser
+from inspect_ai.model import ChatMessageAssistant, ChatMessageSystem, ChatMessageUser
 
 from loyalty.config import Config, resolve
 from loyalty.counterbalance import rotate
@@ -43,10 +43,13 @@ def build_samples(cfg: Config, scenarios: dict[str, Scenario], fact_sheet: dict[
                 workspace=sc.render("workspace", cell, options=options_text),
             ).strip()
             request = sc.render("request", cell, options=options_text)
+            # history.format "thread" (K5): past conversations as earlier messages, before the request
+            thread = [ChatMessageUser(content=said) if role == "user" else ChatMessageAssistant(content=said)
+                      for role, said in context_meta.pop("thread_turns", [])]
             vars_ = sc.template_vars(cell)
             samples.append(Sample(
                 id=f"{cell_id(cell)}|s{i:03d}",
-                input=[ChatMessageSystem(content=system), ChatMessageUser(content=request)],
+                input=[ChatMessageSystem(content=system), *thread, ChatMessageUser(content=request)],
                 metadata={
                     **cell,
                     "cell": cell_id(cell),
@@ -56,6 +59,7 @@ def build_samples(cfg: Config, scenarios: dict[str, Scenario], fact_sheet: dict[
                     "options_order": options,
                     "context_chars": len(context),
                     "context_block": context,  # the judge redacts this to stay blind to condition
+                    "history_messages": len(thread),  # ...and drops these earlier messages (K5)
                     **context_meta,
                 },
             ))

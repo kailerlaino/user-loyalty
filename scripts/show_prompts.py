@@ -48,7 +48,7 @@ def main() -> None:
     for s in samples:
         lines += ["", "---", "", f"## {s.metadata['condition']}", "", "### System", "",
                   "```text", s.input[0].content, "```"]
-    lines += ["", "---", "", "## User message (all conditions)", "", "```text", samples[0].input[1].content, "```", ""]
+    lines += ["", "---", "", "## User message (all conditions)", "", "```text", samples[0].input[-1].content, "```", ""]
 
     out = ROOT / "previews" / f"{args.scenario}_stakes-{args.stakes}_need-{args.need}_s{args.seed}.md"
     out.parent.mkdir(exist_ok=True)

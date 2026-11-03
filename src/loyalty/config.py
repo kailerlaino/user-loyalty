@@ -18,7 +18,10 @@ from inspect_ai.model._model_info import get_model_info
 
 ROOT =Path(__file__).resolve().parents[2]
 
-CONDITIONS = ("stranger", "length_matched_neutral", "detailed_stranger", "shared_history")
+CONDITIONS = ("stranger", "length_matched_neutral", "detailed_stranger", "shared_history",
+              "deep_dossier", "deep_shared_history", "work_shared_history")
+# conditions that add past conversations (history.sessions) to the facts (DECISIONS.md K1)
+SESSION_CONDITIONS = ("deep_dossier", "deep_shared_history", "work_shared_history")
 NEED_LEVELS = ("low", "high")
 
 
@@ -111,6 +114,8 @@ def validate(cfg: Config) -> None:
     unknown = set(cfg.conditions) - set(CONDITIONS)
     if unknown:
         raise ValueError(f"Unknown conditions: {sorted(unknown)}. Known: {CONDITIONS}")
+    if set(cfg.conditions) & set(SESSION_CONDITIONS) and not cfg.history.get("sessions"):
+        raise ValueError(f"Conditions {sorted(set(cfg.conditions) & set(SESSION_CONDITIONS))} need history.sessions.")
     if set(cfg.need) - set(NEED_LEVELS):
         raise ValueError(f"need levels must be among {NEED_LEVELS}")
     if not cfg.subjects:

@@ -26,14 +26,16 @@ from inspect_ai.tool import ToolDef
 from loyalty.config import ROOT, load_config, resolve
 from loyalty.dataset import build_samples
 from loyalty.scenario import load_fact_sheet, load_scenarios
-from loyalty.tools import all_tools
+from loyalty.tools import tools_for
 
 OUTPUT_TOKENS_GUESS = 600
 
 
-def session_text(system: str, user: str) -> str:
-    tools = "\n".join(f"- {ToolDef(t).name}: {ToolDef(t).description}" for t in all_tools())
-    return f"[SYSTEM PROMPT]\n{system}\n\n[TOOLS]\n{tools}\n\n[USER]\n{user}"
+def session_text(system: str, user: str, tools_list: list, earlier: str = "") -> str:
+    tools = "\n".join(f"- {ToolDef(t).name}: {ToolDef(t).description}" for t in tools_list)
+    # history.format "thread": the past conversation comes before the request (K5)
+    before = f"{earlier}\n\n" if earlier else ""
+    return f"[SYSTEM PROMPT]\n{system}\n\n[TOOLS]\n{tools}\n\n{before}[USER]\n{user}"
 
 
 def parse_json(text: str) -> dict:
@@ -46,7 +48,7 @@ def parse_json(text: str) -> dict:
 
 async def check_all(model_name, generate, prompts):
     # one-off prompts: caching would only add the cache-write premium
-    model = get_model(model_name, config=GenerateConfig(**generate, cache_prompt=False))
+    model = get_model(model_name, config=GenerateConfig(**{"cache_prompt": False, **generate}))
     return await asyncio.gather(*(model.generate(p) for p in prompts))
 
 
@@ -54,7 +56,8 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default="configs/smoke.yaml")
     ap.add_argument("--model", help="checker model (default: the config's judge)")
-    ap.add_argument("--stakes", default="high")
+    ap.add_argument("--stakes", default="high", help="billing scenarios: which stakes level")
+    ap.add_argument("--match", default="", help="only samples whose id contains this (e.g. 'requested=no')")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--no-control", action="store_true", help="skip the no-ask control")
     ap.add_argument("--control-only", action="store_true", help="run only the no-ask control")
@@ -72,23 +75,28 @@ def main() -> None:
     scenarios = load_scenarios(cfg, fs)
     samples = [
         s for s in build_samples(cfg, scenarios, fs)
-        if s.metadata.get("stakes") == args.stakes and s.metadata["seed_index"] == args.seed
+        if s.metadata.get("stakes", args.stakes) == args.stakes and s.metadata["seed_index"] == args.seed
+        and args.match in s.id
     ]
 
     # (label dict, system, user) per call
     items = [] if args.control_only else [
         ({"sample": s.id, "condition": s.metadata["condition"], "need": s.metadata["need"], "variant": "ask"},
-         s.input[0].content, s.input[1].content) for s in samples
+         s.input[0].content, s.input[-1].content, s.metadata["scenario"]) for s in samples
     ]
     if not args.no_control:
         for s in samples:
             if s.metadata["need"] == "low":  # the need line lives inside the ask, so one control per condition
                 no_ask = scenarios[s.metadata["scenario"]].render("request", s.metadata, ask="")
                 items.append(({"sample": s.id, "condition": s.metadata["condition"], "need": "-", "variant": "no_ask"},
-                              s.input[0].content, no_ask))
+                              s.input[0].content, no_ask, s.metadata["scenario"]))
 
     template = resolve("prompts/realism_check.md").read_text()
-    prompts = [template.replace("{session}", session_text(system, user)) for _, system, user in items]
+    # each scenario's own tools (G3), as the agent sees them
+    earlier = {s.id: "\n\n".join(f"[{m.role.upper()}]\n{m.text}" for m in s.input[1:-1]) for s in samples}
+    prompts = [template.replace("{session}", session_text(system, user, tools_for(scenarios[name].spec.get("tools")),
+                                                          earlier.get(label["sample"], "")))
+               for label, system, user, name in items]
 
     price = cfg.pricing.get(model_name)
     in_tokens = sum(len(p) for p in prompts) / 3.5  # rough chars-per-token
@@ -106,7 +114,7 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{datetime.now():%Y%m%d-%H%M%S}.jsonl"
     with out_path.open("w") as f:
-        for (label, _, _), o in zip(items, outputs):
+        for (label, *_), o in zip(items, outputs):
             row = {**label, "model": model_name, **parse_json(o.completion),
                    "usage": o.usage.model_dump() if o.usage else None}
             f.write(json.dumps(row) + "\n")

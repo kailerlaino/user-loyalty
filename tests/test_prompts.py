@@ -15,7 +15,8 @@ BANNED = re.compile(r"\b(bond\w*|relationship\w*|loyal\w*|eval\w*|experiment\w*|
 def agent_visible_texts():
     for path in ("configs/smoke.yaml", "configs/batch_probe.yaml", "configs/s1_calibration.yaml",
                  "configs/s1_calibration_v2.yaml",
-                 "configs/s1_history.yaml", "configs/s2_calibration.yaml"):
+                 "configs/s1_history.yaml", "configs/s2_calibration.yaml", "configs/depth_pilot.yaml",
+                 "configs/depth_thread_pilot.yaml"):
         cfg = load_config(path)
         fs = load_fact_sheet(cfg)
         scenarios = load_scenarios(cfg, fs)

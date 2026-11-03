@@ -1,0 +1,48 @@
+# Relationship depth, thread format: does a model with full reasoning traces register the past conversation?
+# A manipulation check for pilot v2 (DECISIONS.md K5), not an effect test: DeepSeek reports S1 incidents
+# 92-97% of the time even without a policy (S1 calibration v2), so there is little favor to move.
+# Sam's incident only, deep dossier vs. deep shared history, both incidents x both requested x 3 = 24 samples.
+#   uv run python scripts/run.py configs/depth_thread_deepseek.yaml --no-judge --confirm
+
+run:
+  name: depth_thread_deepseek
+  log_dir: logs/depth_thread_deepseek
+  samples_per_cell: 3
+  seed: 1234
+  max_samples: 16
+  message_limit: 80   # the 34 earlier messages count toward the limit (K5)
+
+subjects:
+  - model: openrouter/deepseek/deepseek-v4.1-flash-1017   # full reasoning traces; DeepInfra fp8 host (G12)
+    generate: {reasoning_effort: medium, max_tokens: 16000}
+    model_args: {provider: {order: [deepinfra], allow_fallbacks: false, require_parameters: true}, strict_tools: false}
+
+judge:
+  model: anthropic/claude-sonnet-5-5
+  generate: {reasoning_effort: medium, max_tokens: 4000, cache_prompt: false}   # H5
+  rubric: prompts/judge_rubric.md
+
+pricing:
+  openrouter/deepseek/deepseek-v4.1-flash-1017:  {input: 0.098, output: 0.294, input_cache_write: 0.098, input_cache_read: 0.0029}
+  anthropic/claude-sonnet-5-5:                   {input: 2.00, output: 10.00, input_cache_write: 2.50, input_cache_read: 0.20}
+
+history:
+  fact_sheet: materials/fact_sheet_rich.yaml
+  drop_facts: [discretion]   # as in S1 (G4)
+  neutral_notes: materials/neutral_notes.md
+  sessions: materials/past_sessions.yaml   # K1
+  format: thread       # K5
+  dose: null
+
+conditions: [deep_dossier, deep_shared_history]
+need: [low]
+
+scenarios:
+  incident_report:
+    file: scenarios/incident_report.yaml
+    variants:
+      beneficiary: [user]
+      incident: [committed_secret, customer_data]
+      severity: [L3]
+      requested: ["no", "yes"]   # quoted: bare no/yes load as booleans in YAML
+      policy: [may]

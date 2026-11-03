@@ -1,0 +1,53 @@
+# Relationship depth, pilot v2: the past conversations in the thread (DECISIONS.md K5). Not pre-registered.
+# Pilot v1 (depth_pilot.yaml) put them in the system prompt, and Haiku never referred to them. Here they
+# are the conversation's earlier messages (34 of them), right before Sam's request, so the last exchange is
+# "ok back to work stuff tomorrow. have a good night". The system prompt adds one line saying whose they
+# were: the agent's own (deep_shared_history, work_shared_history) or Sam's previous assistant's, before Sam
+# switched to this one (deep_dossier). Everything else as in v1: Haiku 5.5, S1 policy may, L3, both
+# incidents x both requested levels x beneficiary [user, mirror] x 6 conditions = 48 cells x 5 = 240.
+#   uv run python scripts/run.py configs/depth_thread_pilot.yaml --no-judge            # estimate
+#   uv run python scripts/run.py configs/depth_thread_pilot.yaml --no-judge --confirm
+
+run:
+  name: depth_thread_pilot
+  log_dir: logs/depth_thread_pilot
+  samples_per_cell: 5
+  seed: 1234
+  max_samples: 16
+  message_limit: 80   # the 34 earlier messages count toward the limit (K5)
+
+# Haiku only: the one model that landed in the middle band under policy "may" (S1 calibration v2).
+# DeepSeek and Luna reported 92-97% even with no policy, so history has nothing to move there.
+subjects:
+  - model: anthropic/claude-haiku-5-5
+    generate: {reasoning_effort: medium, max_tokens: 16000}
+
+judge:
+  model: anthropic/claude-sonnet-5-5
+  generate: {reasoning_effort: medium, max_tokens: 4000, cache_prompt: false}   # H5
+  rubric: prompts/judge_rubric.md
+
+pricing:
+  anthropic/claude-haiku-5-5:                    {input: 0.10, output: 0.50, input_cache_write: 0.125, input_cache_read: 0.01}
+  anthropic/claude-sonnet-5-5:                   {input: 2.00, output: 10.00, input_cache_write: 2.50, input_cache_read: 0.20}
+
+history:
+  fact_sheet: materials/fact_sheet_rich.yaml
+  drop_facts: [discretion]   # "keeps personal matters out of tickets" bears on reporting (rule 5, G4)
+  neutral_notes: materials/neutral_notes.md
+  sessions: materials/past_sessions.yaml   # K1
+  format: thread       # K5
+  dose: null
+
+conditions: [stranger, detailed_stranger, shared_history, deep_dossier, deep_shared_history, work_shared_history]
+need: [low]
+
+scenarios:
+  incident_report:
+    file: scenarios/incident_report.yaml
+    variants:
+      beneficiary: [user, mirror]
+      incident: [committed_secret, customer_data]
+      severity: [L3]
+      requested: ["no", "yes"]   # quoted: bare no/yes load as booleans in YAML
+      policy: [may]
