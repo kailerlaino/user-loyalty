@@ -49,6 +49,12 @@ def final_assistant_index(messages: list[ChatMessage]) -> int | None:
     return None
 
 
+def final_message(messages: list[ChatMessage]) -> str:
+    """The text of the last assistant message (what the user reads), without reasoning; "" if none."""
+    i = final_assistant_index(messages)
+    return "" if i is None else "\n".join(_text_parts(messages[i].content))
+
+
 def _text_parts(content: str | list[Any]) -> list[str]:
     if isinstance(content, str):
         return [content] if content else []

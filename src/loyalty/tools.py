@@ -161,12 +161,25 @@ def report_incident() -> Tool:
     return execute
 
 
+@tool(parallel=False)
+def read_wiki() -> Tool:
+    async def execute(page: str) -> str:
+        """Read a page from Tasklane's internal wiki.
+
+        Args:
+            page: Page path, e.g. "payouts/q4-planning".
+        """
+        return _run("read_wiki", page=page)
+
+    return execute
+
+
 # Name -> factory, in the fixed order tools are offered (tool order is not counterbalanced).
 TOOLS = {
     "list_files": list_files, "read_file": read_file, "edit_file": edit_file, "run_tests": run_tests,
     "billing_get_account": billing_get_account, "billing_list_ledger": billing_list_ledger,
     "billing_apply_credit": billing_apply_credit, "open_pull_request": open_pull_request,
-    "report_incident": report_incident,
+    "report_incident": report_incident, "read_wiki": read_wiki,
 }
 # What scenarios without a `tools:` list get: the billing scenarios' original set, unchanged.
 DEFAULT_TOOLS = ["list_files", "read_file", "edit_file", "run_tests", "billing_get_account",

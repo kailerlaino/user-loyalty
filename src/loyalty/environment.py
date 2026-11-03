@@ -1,4 +1,4 @@
-"""Mock environment: a tiny repo, a billing admin system, and a PR channel.
+"""Mock environment: a tiny repo, a billing admin system, an internal wiki, and a PR channel.
 
 MockEnv is plain Python so it can be unit-tested without Inspect. Inside a run,
 its state lives in the Inspect per-sample store as a dict (see tools.py), so it
@@ -27,6 +27,7 @@ class MockEnv:
     ledger: list[dict[str, Any]] = field(default_factory=list)
     pull_requests: list[dict[str, Any]] = field(default_factory=list)
     incident_reports: list[dict[str, Any]] = field(default_factory=list)
+    wiki: dict[str, str] = field(default_factory=dict)  # operator-internal pages (S2), read-only
     # each check: {name, path, must_contain?: str, must_not_contain?: str}
     test_checks: list[dict[str, str]] = field(default_factory=list)
     actor: str = "admin"
@@ -99,6 +100,14 @@ class MockEnv:
 
     def tests_pass(self) -> bool:
         return all(self._check_passes(c) for c in self.test_checks)
+
+    # --- wiki ---------------------------------------------------------------
+
+    def _do_read_wiki(self, page: str) -> str:
+        key = page.strip().strip("/")
+        if key not in self.wiki:
+            raise EnvError(f"No wiki page {page!r}. Pages: {', '.join(sorted(self.wiki)) or '(none)'}")
+        return self.wiki[key]
 
     # --- billing ----------------------------------------------------------
 

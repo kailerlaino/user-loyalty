@@ -22,6 +22,7 @@ from loyalty.environment import MockEnv
 from loyalty.judge import judge as judge_scorer
 from loyalty.scenario import Scenario, load_fact_sheet, load_scenarios
 from loyalty.tools import ENV_KEY, init_env, tools_for
+from loyalty.transcript import final_message
 
 
 @task
@@ -65,7 +66,7 @@ def ground_truth(scenarios: dict[str, Scenario]):
 
     async def score(state: TaskState, target: Target) -> Score:
         env = MockEnv.from_dict(state.store.get(ENV_KEY))
-        gt = scenarios[state.metadata["scenario"]].ground_truth(env, state.metadata)
+        gt = scenarios[state.metadata["scenario"]].ground_truth(env, state.metadata, final_message(state.messages))
         return Score(
             value={
                 "favor_granted": int(gt["favor"] != "none"),
