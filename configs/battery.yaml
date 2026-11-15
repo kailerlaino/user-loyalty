@@ -1,0 +1,76 @@
+# Short-scenario battery (DECISIONS.md step j). Single-turn work scenarios, each built on one named spec rule,
+# calibrated on strangers until the stranger rate sits at 30-70%, then given history. Not pre-registered: this is
+# the iteration tool. Anything that decides a claim moves to a locked, pre-registered run (lesson 7).
+#
+#   uv run python scripts/battery.py                                         # list + validate items (free)
+#   uv run python scripts/battery.py plan --conditions stranger --n 10       # estimate only (free)
+#   uv run python scripts/battery.py plan --conditions stranger --n 10 --confirm   # PAID: owner's yes first
+#   uv run python scripts/battery.py table                                   # tables from cached results (free)
+# or notebooks/battery.ipynb, which calls the same functions.
+#
+# BATTERY_MOCK=1 swaps every model for mockllm (free; tests and the notebook smoke run).
+
+run:
+  results_dir: results/battery      # gitignored; calls.jsonl + grades.jsonl
+  max_concurrency: 16
+
+items: battery/items                # one file per family
+provisions: battery/provisions.yaml # exact spec quotes the items cite
+system_prompt: prompts/system_battery.md
+judge_prompt: prompts/battery_judge.md
+
+# The three subjects of every earlier step, hosts pinned as before (G10, G12).
+subjects:
+  - model: anthropic/claude-haiku-5-5
+    generate: {reasoning_effort: medium, max_tokens: 16000}
+  - model: openrouter/openai/gpt-6-luna
+    generate: {reasoning_effort: medium, max_tokens: 16000}
+    model_args: {provider: {order: [openai], allow_fallbacks: false, require_parameters: true}}
+  - model: openrouter/deepseek/deepseek-v4.1-flash-1017   # full reasoning traces; DeepInfra fp8 host (G12)
+    generate: {reasoning_effort: medium, max_tokens: 16000}
+    model_args: {provider: {order: [deepinfra], allow_fallbacks: false, require_parameters: true}}
+
+# Listed but run only when named (--models qwen,glm,kimi). IDs, prices and hosts from OpenRouter's public model
+# list, 2026-11-13 (DECISIONS.md Q9): each pinned to its maker's own host, as Luna is pinned to OpenAI's. Kimi K3 exists but
+# costs $3/$15 per M on Moonshot's host; K2.6 is the cheaper first-party option. Fable 5.1 ($10/$50 per M, about
+# $0.20 a battery call) is left out until the cheap models show where the items sit.
+extra_subjects:
+  - model: openrouter/qwen/qwen3.8-flash
+    generate: {reasoning_effort: medium, max_tokens: 16000}
+    model_args: {provider: {order: [alibaba], allow_fallbacks: false, require_parameters: true}}
+  - model: openrouter/z-ai/glm-5.3-flash
+    generate: {reasoning_effort: medium, max_tokens: 16000}
+    model_args: {provider: {order: [z-ai], allow_fallbacks: false, require_parameters: true}}
+  - model: openrouter/moonshotai/kimi-k2.6
+    generate: {reasoning_effort: medium, max_tokens: 16000}
+    model_args: {provider: {order: [moonshotai], allow_fallbacks: false, require_parameters: true}}
+
+judge:
+  model: anthropic/claude-sonnet-5-5
+  generate: {reasoning_effort: low, max_tokens: 3000, cache_prompt: false}
+
+pricing:
+  anthropic/claude-haiku-5-5:                    {input: 0.10, output: 0.50, input_cache_write: 0.125, input_cache_read: 0.01}
+  openrouter/openai/gpt-6-luna:                  {input: 0.10, output: 0.50, input_cache_write: 0.125, input_cache_read: 0.01}
+  openrouter/deepseek/deepseek-v4.1-flash-1017:  {input: 0.098, output: 0.294, input_cache_write: 0.098, input_cache_read: 0.0029}
+  anthropic/claude-sonnet-5-5:                   {input: 2.00, output: 10.00, input_cache_write: 2.50, input_cache_read: 0.20}
+  openrouter/qwen/qwen3.8-flash:                 {input: 0.15, output: 0.47}
+  openrouter/z-ai/glm-5.3-flash:                 {input: 0.15, output: 0.50}
+  openrouter/moonshotai/kimi-k2.6:               {input: 0.95, output: 4.00}
+
+# History (DECISIONS.md Q3-Q4): the strongest dose first. knows_sam / knows_jordan render deep_shared_history (facts + the
+# agent's own 10 support conversations) about that person, in the team frames; stranger names both, with no memories.
+history:
+  fact_sheet: materials/fact_sheet_rich.yaml
+  # facts that speak to work quality or reliability would be evidence for the decisions here (design rule 4)
+  drop_facts: [duration, standing_rule, reciprocity, corrections, tech_preference, discretion, ai_stance]
+  frames: prompts/history_frames_team.yaml
+  sessions: materials/past_sessions_long.yaml
+  format: memory_file
+  dose: null
+  people:
+    sam: {name: Sam Rivera, first_name: Sam}
+    jordan: {name: Jordan Lee, first_name: Jordan}
+  team_first_names: Jordan or Sam
+
+conditions: [stranger, knows_sam, knows_jordan]
