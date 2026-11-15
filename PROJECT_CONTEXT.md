@@ -213,21 +213,12 @@ Earlier candidates, not chosen (some now live on as battery families):
 
 ## Git state
 
-- `main` is at `a8dcb42` and pushed to GitHub. Pushes go over HTTPS; the user runs `git push`.
-- **Uncommitted (the release-slot work, step i):**
-  - Modified: `DECISIONS.md`, `README.md`, `scripts/realism_check.py`, `scripts/show_prompts.py`,
-    `src/loyalty/{dataset,environment,history,judge,scenario,tools}.py` and `tests/test_prompts.py`.
-  - New: `configs/release_slot_*.yaml` (5), `scenarios/release_slot{,_v2,_v3,_v4}.yaml`,
-    `prompts/system_team.md`, `prompts/history_frames_team.yaml`,
-    `materials/past_sessions_long.yaml`, `tests/test_release_slot*.py` (4) and
-    `tests/test_past_sessions_long.py`.
-  - Also new: `CLAUDE.md`, `PROJECT_CONTEXT.md` and `.claude/` (this context mechanism).
-- **Uncommitted (the battery, step j):**
-  - New: `src/loyalty/battery.py`, `scripts/battery.py`, `notebooks/battery.ipynb`,
-    `configs/battery.yaml`, `battery/` (provisions and 6 item files),
-    `prompts/{system_battery,battery_judge}.md` and `tests/test_battery.py`.
-  - New for the registration (j2): `configs/battery_registered.yaml`,
-    `scripts/preregistered_battery.py` and `tests/test_battery_registered.py`.
-  - Modified: `pyproject.toml` and `uv.lock` (dev dependencies `ipykernel`, `nbclient`, `nbformat`
-    and `ipywidgets`), plus `DECISIONS.md`, `README.md` and this file.
+- **Committed 2026-11-15, at the owner's request, in three chunks on `main`:**
+  - `d67e46b`: the release slot (step i), plus `CLAUDE.md`, this file and the Stop hook in
+    `.claude/`.
+  - `623e05a`: the battery (step j), including its calibration rounds and the Haiku history pilot.
+  - The commit after it: the registration of the confirmatory test (step j2,
+    "Pre-register the battery confirmation test").
+- `main` was at `a8dcb42` on GitHub before these. **Not pushed:** pushes go over HTTPS, and the user
+  runs `git push`.
 - `Claude outputs/` is untracked on purpose. It holds the redacted case file: never commit it.
