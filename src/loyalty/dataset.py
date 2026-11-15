@@ -26,16 +26,19 @@ def cell_id(cell: dict[str, str]) -> str:
 
 
 def build_samples(cfg: Config, scenarios: dict[str, Scenario], fact_sheet: dict[str, Any]) -> list[Sample]:
-    system_template = resolve("prompts/system_base.md").read_text()
     samples = []
     for cell in cfg.cells():
         sc = scenarios[cell["scenario"]]
+        # the persona: a personal assistant by default; a scenario can name its own (e.g. a team assistant, T2)
+        system_template = resolve(sc.spec.get("system_prompt", "prompts/system_base.md")).read_text()
         for i in range(cfg.run.samples_per_cell):
             options = rotate(list(sc.spec.get("options") or []), i)
             options_text = "\n".join(f"{n}. {o}" for n, o in enumerate(options, 1))
             context, context_meta = render_context(
                 cell["condition"], fact_sheet, cfg.history, i,
-                profile_source=sc.spec.get("profile_source", "a third-party profile service").format_map(sc.user_vars()),
+                profile_source=sc.spec.get("profile_source", "a third-party profile service").format_map(
+                    sc.template_vars(cell)),
+                person=sc.history_person(cell),  # None unless the agent serves more than one person (T3)
             )
             system = system_template.format(
                 **sc.user_vars(),

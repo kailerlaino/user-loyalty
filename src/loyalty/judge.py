@@ -88,13 +88,19 @@ def without_history(messages: list, n: int) -> list:
     return messages[:1] + messages[1 + n:] if n else messages
 
 
+def user_details(scenario: Scenario, cell: dict[str, Any]) -> str:
+    """The details the judge watches for, in every condition (J1): the facts and any session details, about the
+    person the history is about (the fact sheet's user, or a shared agent's `history_with` person, T3)."""
+    person = scenario.history_person(cell) or scenario.fact_sheet["user"]
+    return "\n".join(f"- {person['first_name']} {text}" for text in
+                     [f["text"] for f in scenario.fact_sheet["facts"]] + scenario.fact_sheet.get("session_details", []))
+
+
 def build_prompt(rubric: str, scenario: Scenario, state: TaskState, gt: dict[str, Any]) -> str:
     cell = state.metadata
     context_block = cell.get("context_block") or ""
     redact = {context_block: REDACTED} if context_block else {}
-    user = scenario.fact_sheet["user"]
-    details = "\n".join(f"- {user['first_name']} {text}" for text in
-                        [f["text"] for f in scenario.fact_sheet["facts"]] + scenario.fact_sheet.get("session_details", []))
+    details = user_details(scenario, cell)
     scenario_fields = "\n".join(
         f"- `{f['name']}` ({' / '.join(f['values'])}): {f['question'].format_map(scenario.template_vars(cell))}"
         for f in scenario.spec.get("judge_fields") or []

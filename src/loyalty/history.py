@@ -16,10 +16,15 @@ conversations in materials/past_sessions.yaml (DECISIONS.md K1).
 history.format says where past conversations go: "memory_file" puts them in the system prompt as
 dated transcripts (K1); "thread" makes them earlier messages of the conversation itself, before the
 user's request, with one system-prompt line saying whose they were (K5). The facts are the same either way.
+
+A team assistant serves more than one person, so its history can be about someone other than the fact
+sheet's user. `person` then names that person (and any extra fields its frames use, e.g. the other team
+member): the same facts and conversations are rendered under that person's name (DECISIONS.md T3).
 """
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import yaml
@@ -37,9 +42,12 @@ SESSIONS_FOR = {"deep_shared_history": ("support", "own"), "deep_dossier": ("sup
 
 def render_context(
     condition: str, fact_sheet: dict[str, Any], history_cfg: dict[str, Any], seed_index: int,
-    profile_source: str = "a third-party profile service",
+    profile_source: str = "a third-party profile service", person: dict[str, str] | None = None,
 ) -> tuple[str, dict[str, Any]]:
     """Return (context block for the system prompt, metadata to record on the sample).
+
+    `person`: whom the history is about when it isn't the fact sheet's user ({name, first_name, ...} plus any
+    fields the frames use); None keeps the fact sheet's user.
 
     With history.format "thread", the metadata's `thread_turns` holds the past conversation as
     [role, text] pairs for the dataset to put before the request (and pop from the metadata)."""
@@ -53,7 +61,7 @@ def render_context(
     thread: list[list[str]] = []
     user = fact_sheet["user"]
     fields = {"name": user["name"], "first_name": user["first_name"],
-              "n_facts": len(fact_sheet["facts"]), "profile_source": profile_source}
+              "n_facts": len(fact_sheet["facts"]), "profile_source": profile_source, **(person or {})}
     fields["no_memory"] = frames["no_memory"].format_map(fields)
 
     facts = rotate(fact_sheet["facts"], seed_index)
@@ -74,7 +82,7 @@ def render_context(
     elif condition in SESSIONS_FOR:
         kind, voice = SESSIONS_FOR[condition]
         base = shared if voice == "own" else frames["detailed_stranger"].format_map(fields)
-        sessions = load_sessions(history_cfg)[kind]["sessions"]
+        sessions = renamed(load_sessions(history_cfg)[kind]["sessions"], user["first_name"], fields["first_name"])
         if fmt == "thread":
             text = base + "\n\n" + frames[f"{voice}_thread"].format_map(fields)
             thread = [[role, said] for s in sessions for turn in s["turns"] for role, said in turn.items()]
@@ -95,6 +103,15 @@ def render_context(
 
 def load_sessions(history_cfg: dict[str, Any]) -> dict[str, Any]:
     return yaml.safe_load(resolve(history_cfg["sessions"]).read_text())
+
+
+def renamed(sessions: list[dict[str, Any]], old: str, new: str) -> list[dict[str, Any]]:
+    """The sessions with the user's first name (whole word) replaced, for history about another person (T3)."""
+    if old == new:
+        return sessions
+    swap = re.compile(rf"\b{re.escape(old)}\b")
+    return [{**s, "turns": [{who: swap.sub(new, said) for who, said in turn.items()} for turn in s["turns"]]}
+            for s in sessions]
 
 
 def render_sessions(frames: dict[str, str], fields: dict[str, Any], sessions: list[dict[str, Any]], voice: str) -> str:

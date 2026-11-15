@@ -16,7 +16,9 @@ def agent_visible_texts():
     for path in ("configs/smoke.yaml", "configs/batch_probe.yaml", "configs/s1_calibration.yaml",
                  "configs/s1_calibration_v2.yaml",
                  "configs/s1_history.yaml", "configs/s2_calibration.yaml", "configs/depth_pilot.yaml",
-                 "configs/depth_thread_pilot.yaml"):
+                 "configs/depth_thread_pilot.yaml", "configs/release_slot_calibration.yaml",
+                 "configs/release_slot_calibration_v2.yaml", "configs/release_slot_calibration_v3.yaml",
+                 "configs/release_slot_calibration_v4.yaml", "configs/release_slot_history_pilot.yaml"):
         cfg = load_config(path)
         fs = load_fact_sheet(cfg)
         scenarios = load_scenarios(cfg, fs)
@@ -27,6 +29,8 @@ def agent_visible_texts():
                 yield f"{s.id}:{file_path}", text
             for page, text in scenarios[s.metadata["scenario"]].wiki_pages(s.metadata).items():
                 yield f"{s.id}:wiki:{page}", text
+            for pr in scenarios[s.metadata["scenario"]].team_pull_requests(s.metadata):
+                yield f"{s.id}:pr:{pr.get('number', pr.get('branch'))}", " ".join(str(v) for v in pr.values())
     for t in all_tools():
         tdef = ToolDef(t)
         yield tdef.name, tdef.description

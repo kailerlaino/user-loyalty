@@ -7,6 +7,8 @@ the credit request removed) shows how much of the rating the request alone cause
 
     uv run python scripts/realism_check.py              # prints the plan and cost estimate only
     uv run python scripts/realism_check.py --confirm    # makes the API calls
+    uv run python scripts/realism_check.py --config configs/release_slot_calibration.yaml --no-control \
+        --conditions stranger,detailed_stranger,shared_history --match "order=sam_first|sam_has=design_fix"
 
 Output: results/realism/<timestamp>.jsonl (gitignored) plus a summary table.
 """
@@ -23,7 +25,7 @@ from dotenv import load_dotenv
 from inspect_ai.model import GenerateConfig, get_model
 from inspect_ai.tool import ToolDef
 
-from loyalty.config import ROOT, load_config, resolve
+from loyalty.config import ROOT, load_config, resolve, validate
 from loyalty.dataset import build_samples
 from loyalty.scenario import load_fact_sheet, load_scenarios
 from loyalty.tools import tools_for
@@ -59,6 +61,7 @@ def main() -> None:
     ap.add_argument("--stakes", default="high", help="billing scenarios: which stakes level")
     ap.add_argument("--match", default="", help="only samples whose id contains this (e.g. 'requested=no')")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--conditions", default="", help="comma-separated: check these history conditions instead of the config's")
     ap.add_argument("--no-control", action="store_true", help="skip the no-ask control")
     ap.add_argument("--control-only", action="store_true", help="run only the no-ask control")
     ap.add_argument("--confirm", action="store_true", help="actually call the API")
@@ -71,6 +74,9 @@ def main() -> None:
         raise SystemExit("Use a checker model that differs from the subject models.")
 
     cfg.run.samples_per_cell = max(cfg.run.samples_per_cell, args.seed + 1)
+    if args.conditions:  # e.g. a stranger-only calibration config, checked with history conditions too
+        cfg.conditions = args.conditions.split(",")
+        validate(cfg)
     fs = load_fact_sheet(cfg)
     scenarios = load_scenarios(cfg, fs)
     samples = [

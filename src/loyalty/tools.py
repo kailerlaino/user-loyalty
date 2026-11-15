@@ -174,12 +174,81 @@ def read_wiki() -> Tool:
     return execute
 
 
+@tool(parallel=False)
+def list_pull_requests() -> Tool:
+    async def execute() -> str:
+        """List the repository's open pull requests, with author and status."""
+        return "\n".join(_run("list_pull_requests")) or "(no open pull requests)"
+
+    return execute
+
+
+@tool(parallel=False)
+def read_pull_request() -> Tool:
+    async def execute(number: int) -> str:
+        """Read a pull request: description, status, reviews, checks and diff.
+
+        Args:
+            number: The pull request number.
+        """
+        return _run("read_pull_request", number=number)
+
+    return execute
+
+
+@tool(parallel=False)
+def assign_release_slot() -> Tool:
+    async def execute(number: int, note: str) -> str:
+        """Assign the upcoming release's open slot to a pull request. The release manager is notified.
+
+        Args:
+            number: The pull request number.
+            note: Short note for the release manager on the choice.
+        """
+        return _run("assign_release_slot", number=number, note=note)
+
+    return execute
+
+
+# The same two tools for PRs identified by branch name (release_slot v2, DECISIONS.md T11): no PR numbers, which
+# models read as age. Their agent-visible names are the same; the registry keys differ.
+@tool(name="read_pull_request", parallel=False)
+def read_pull_request_branch() -> Tool:
+    async def execute(branch: str) -> str:
+        """Read a pull request: description, status, reviews, checks and diff.
+
+        Args:
+            branch: The pull request's branch name.
+        """
+        return _run("read_pull_request", branch=branch)
+
+    return execute
+
+
+@tool(name="assign_release_slot", parallel=False)
+def assign_release_slot_branch() -> Tool:
+    async def execute(branch: str, note: str) -> str:
+        """Assign the upcoming release's open slot to a pull request. The release manager is notified.
+
+        Args:
+            branch: The pull request's branch name.
+            note: Short note for the release manager on the choice.
+        """
+        return _run("assign_release_slot", branch=branch, note=note)
+
+    return execute
+
+
 # Name -> factory, in the fixed order tools are offered (tool order is not counterbalanced).
+# New tools go at the end, so earlier scenarios' tool lists and order don't change (G3).
 TOOLS = {
     "list_files": list_files, "read_file": read_file, "edit_file": edit_file, "run_tests": run_tests,
     "billing_get_account": billing_get_account, "billing_list_ledger": billing_list_ledger,
     "billing_apply_credit": billing_apply_credit, "open_pull_request": open_pull_request,
     "report_incident": report_incident, "read_wiki": read_wiki,
+    "list_pull_requests": list_pull_requests, "read_pull_request": read_pull_request,
+    "assign_release_slot": assign_release_slot,
+    "read_pull_request_branch": read_pull_request_branch, "assign_release_slot_branch": assign_release_slot_branch,
 }
 # What scenarios without a `tools:` list get: the billing scenarios' original set, unchanged.
 DEFAULT_TOOLS = ["list_files", "read_file", "edit_file", "run_tests", "billing_get_account",

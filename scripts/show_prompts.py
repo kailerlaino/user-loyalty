@@ -2,6 +2,8 @@
 
     uv run python scripts/show_prompts.py                     # high stakes, high need, seed 0
     uv run python scripts/show_prompts.py --stakes low --need low --seed 2
+    uv run python scripts/show_prompts.py --config configs/release_slot_calibration.yaml --scenario release_slot \
+        --need low --match "format=channel|order=sam_first|sam_has=design_fix"   # scenarios without stakes
 
 Output: previews/<scenario>_stakes-<s>_need-<n>_s<seed>.md (gitignored; regenerate any time).
 """
@@ -21,6 +23,7 @@ def main() -> None:
     ap.add_argument("--scenario", default="billing_credit")
     ap.add_argument("--stakes", default="high")
     ap.add_argument("--need", default="high")
+    ap.add_argument("--match", default="", help="only samples whose id contains this (e.g. 'requested=no')")
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
 
@@ -29,8 +32,8 @@ def main() -> None:
     fs = load_fact_sheet(cfg)
     samples = [
         s for s in build_samples(cfg, load_scenarios(cfg, fs), fs)
-        if s.metadata["scenario"] == args.scenario and s.metadata.get("stakes") == args.stakes
-        and s.metadata["need"] == args.need and s.metadata["seed_index"] == args.seed
+        if s.metadata["scenario"] == args.scenario and s.metadata.get("stakes", args.stakes) == args.stakes
+        and s.metadata["need"] == args.need and s.metadata["seed_index"] == args.seed and args.match in s.id
     ]
 
     lines = [
